@@ -37,64 +37,131 @@ class CucumberRunner {
                 include("${it}/**/*.feature")
             }
         }
+
+        // cleanup first
+        resultsDir.deleteDir()
+        resultsDir.mkdirs()
+
         testResultCounter.beforeSuite(features.files.size())
-        GParsPool.withPool(options.maxParallelForks) {
-            features.files.eachParallel { File featureFile ->
-                String featureName = getFeatureNameFromFile(featureFile, sourceSet)
-                File resultsFile = new File(resultsDir, "${featureName}.json")
-                File consoleOutLogFile = new File(resultsDir, "${featureName}-out.log")
-                File consoleErrLogFile = new File(resultsDir, "${featureName}-err.log")
-                File junitResultsFile = new File(resultsDir, "${featureName}.xml")
 
-                List<String> args = []
-                options.stepDefinitionRoots.each {
-                    args << '--glue'
-                    args << it
-                }
+        if (options.maxParallelForks > 1) {
+          GParsPool.withPool(options.maxParallelForks) {
+            features.collate(options.maxParallelForks).eachWithIndexParallel { featureGroup, index ->
+              List<String> featureFiles = featureGroup.collect { File featureFile -> featureFile.absolutePath }
+
+              File resultsFile = new File(resultsDir, "run-${index}.json")
+              File consoleOutLogFile = new File(resultsDir, "run-out-${index}.log")
+              File consoleErrLogFile = new File(resultsDir, "run-err-${index}.log")
+              File junitResultsFile = new File(resultsDir, "junit-run-${index}.xml")
+
+              List<String> args = []
+              options.stepDefinitionRoots.each {
+                args << '--glue'
+                args << it
+              }
+              args << PLUGIN
+              args << "json:${resultsFile.absolutePath}"
+              if (options.junitReport) {
                 args << PLUGIN
-                args << "json:${resultsFile.absolutePath}"
-                if (options.junitReport) {
-                    args << PLUGIN
-                    args << "junit:${junitResultsFile.absolutePath}"
-                }
-                if (options.isDryRun) {
-                    args << '--dry-run'
-                }
-                if (options.isMonochrome) {
-                    args << '--monochrome'
-                }
-                if (options.isStrict) {
-                    args << '--strict'
-                }
-                if (!options.tags.isEmpty()) {
-                    args << '--tags'
-                    args << options.tags.join(',')
-                }
-                args << '--snippets'
-                args << options.snippets
-                args << featureFile.absolutePath
+                args << "junit:${junitResultsFile.absolutePath}"
+              }
+              if (options.isDryRun) {
+                args << '--dry-run'
+              }
+              if (options.isMonochrome) {
+                args << '--monochrome'
+              }
+              if (options.isStrict) {
+                args << '--strict'
+              }
+              if (!options.tags.isEmpty()) {
+                args << '--tags'
+                args << options.tags.join(',')
+              }
+              args << '--snippets'
+              args << options.snippets
+              featureFiles.each { featureFile ->
+                args << featureFile
+              }
 
-                new JavaProcessLauncher('cucumber.api.cli.Main', sourceSet.runtimeClasspath.toList())
-                        .setArgs(args)
-                        .setConsoleOutLogFile(consoleOutLogFile)
-                        .setConsoleErrLogFile(consoleErrLogFile)
-                        .setSystemProperties(systemProperties)
-                        .execute()
-                if (resultsFile.exists()) {
-                    List<CucumberFeatureResult> results = parseFeatureResult(resultsFile).collect {
-                        log.debug("Logging result for $it.name")
-                        createResult(it)
-                    }
-                    results.each { CucumberFeatureResult result ->
-                        testResultCounter.afterFeature(result)
-                    }
-                } else {
-                    hasFeatureParseErrors.set(true)
-                    if (consoleErrLogFile.exists()) {
-                        log.error(consoleErrLogFile.text)
-                    }
+              new JavaProcessLauncher('cucumber.api.cli.Main', sourceSet.runtimeClasspath.toList())
+              .setArgs(args)
+              .setConsoleOutStream(consoleOutLogFile.newOutputStream())
+              .setConsoleErrStream(consoleErrLogFile.newDataOutputStream())
+              .setSystemProperties(systemProperties)
+              .execute()
+              if (resultsFile.exists()) {
+                List<CucumberFeatureResult> results = parseFeatureResult(resultsFile).collect {
+                  log.debug("Logging result for $it.name")
+                  createResult(it)
                 }
+                results.each { CucumberFeatureResult result ->
+                  testResultCounter.afterFeature(result)
+                }
+              } else {
+                hasFeatureParseErrors.set(true)
+                if (consoleErrLogFile.exists()) {
+                  log.error(consoleErrLogFile.text)
+                }
+              }
             }
+          }
+        } else {
+          List<String> featureFiles = features.collect { File featureFile -> featureFile.absolutePath }
+          long ts = System.currentTimeMillis()
+          File resultsFile = new File(resultsDir, "run-${ts}.json")
+          File junitResultsFile = new File(resultsDir, "junit-run-${ts}.xml")
+
+          List<String> args = []
+          options.stepDefinitionRoots.each {
+            args << '--glue'
+            args << it
+          }
+          args << PLUGIN
+          args << "json:${resultsFile.absolutePath}"
+          if (options.junitReport) {
+            args << PLUGIN
+            args << "junit:${junitResultsFile.absolutePath}"
+          }
+          args << PLUGIN
+          args << "pretty"
+          if (options.isDryRun) {
+            args << '--dry-run'
+          }
+          if (options.isMonochrome) {
+            args << '--monochrome'
+          }
+          if (options.isStrict) {
+            args << '--strict'
+          }
+          if (!options.tags.isEmpty()) {
+            args << '--tags'
+            args << options.tags.join(',')
+          }
+          args << '--snippets'
+          args << options.snippets
+          featureFiles.each { featureFile ->
+            args << featureFile
+          }
+
+          new JavaProcessLauncher('cucumber.api.cli.Main', sourceSet.runtimeClasspath.toList())
+          .setArgs(args)
+          .setConsoleOutStream(System.out)
+          .setConsoleErrStream(System.err)
+          .setSystemProperties(systemProperties)
+          .execute()
+
+          if (resultsFile.exists()) {
+            List<CucumberFeatureResult> results = parseFeatureResult(resultsFile).collect {
+              log.debug("Logging result for $it.name")
+              createResult(it)
+            }
+            results.each { CucumberFeatureResult result ->
+              testResultCounter.afterFeature(result)
+            }
+          } else {
+            hasFeatureParseErrors.set(true)
+          }
         }
 
         if (hasFeatureParseErrors.get()) {
