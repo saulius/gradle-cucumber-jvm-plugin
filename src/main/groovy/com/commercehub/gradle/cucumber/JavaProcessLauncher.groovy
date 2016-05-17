@@ -1,5 +1,6 @@
 package com.commercehub.gradle.cucumber
 
+import java.io.OutputStream
 import groovy.util.logging.Slf4j
 import org.zeroturnaround.exec.ProcessExecutor
 
@@ -11,8 +12,8 @@ class JavaProcessLauncher {
     String mainClassName
     List<File> classpath
     List<String> args = []
-    File consoleOutLogFile
-    File consoleErrLogFile
+    OutputStream consoleOutStream
+    OutputStream consoleErrStream
     Map<String, String> systemProperties = [:]
 
     JavaProcessLauncher(String mainClassName, List<File> classpath) {
@@ -25,13 +26,13 @@ class JavaProcessLauncher {
         return this
     }
 
-    JavaProcessLauncher setConsoleOutLogFile(File consoleOutLogFile) {
-        this.consoleOutLogFile = consoleOutLogFile
+    JavaProcessLauncher setConsoleOutStream(OutputStream consoleOutStream) {
+        this.consoleOutStream = consoleOutStream
         return this
     }
 
-    JavaProcessLauncher setConsoleErrLogFile(File consoleErrLogFile) {
-        this.consoleErrLogFile = consoleErrLogFile
+    JavaProcessLauncher setConsoleErrStream(OutputStream consoleErrStream) {
+        this.consoleErrStream = consoleErrStream
         return this
     }
 
@@ -47,18 +48,18 @@ class JavaProcessLauncher {
         command << classPathAsString
         if (!systemProperties.isEmpty()) {
             systemProperties.keySet().each { key ->
-                command << "-D${key}=${systemProperties.get(key)}".toString()
+                command << "${key}=${systemProperties.get(key)}".toString()
             }
         }
         command << mainClassName
         command.addAll(args)
 
         ProcessExecutor processExecutor = new ProcessExecutor().command(command)
-        if (consoleOutLogFile) {
-            processExecutor.redirectOutput(consoleOutLogFile.newOutputStream())
+        if (consoleOutStream) {
+            processExecutor.redirectOutput(consoleOutStream)
         }
-        if (consoleErrLogFile) {
-            processExecutor.redirectError(consoleErrLogFile.newDataOutputStream())
+        if (consoleErrStream) {
+            processExecutor.redirectError(consoleErrStream)
         }
         log.debug("Running command [${command.join(' ')}]")
         return processExecutor.destroyOnExit().execute().exitValue
