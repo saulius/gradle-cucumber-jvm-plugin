@@ -39,6 +39,9 @@ class CucumberTask extends DefaultTask implements CucumberRunnerOptions {
 
         if (!isPassing) {
             handleTestFailures()
+        } else {
+          String reportUrl = new ConsoleRenderer().asClickableFileUrl(new File(reportsDir, 'feature-overview.html'))
+          println("See Cucumber report at: $reportUrl")
         }
     }
 
