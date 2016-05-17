@@ -50,16 +50,13 @@ class MasterThoughtReportGenerator implements ReportGenerator {
     private void setJsonFileUriToRelativePaths(List<String> jsonFileList) {
         String absolutePath
         String relativePath
-        Pattern pattern = Pattern.compile('\\s.*"uri":(?: |)"(.*?)".*\\s')
         jsonFileList.each { String fileName ->
             File thisFile = new File(fileName)
             String content = thisFile.text
             if (content.contains('"uri":')) {
-                Matcher matcher = pattern.matcher(content)
-                absolutePath = matcher[0][1]
                 String featureRoot = "src/${parentTask.sourceSet.name}/resources/"
-                relativePath = absolutePath[absolutePath.lastIndexOf(featureRoot) + featureRoot.length()..-1]
-                content = content.replace(absolutePath, relativePath)
+                Pattern pattern = Pattern.compile('("uri":(?: |)").*' + featureRoot)
+                content = content.replaceAll(pattern, "\$1")
                 thisFile.write(content)
             }
         }
