@@ -4,8 +4,8 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.tasks.SourceSet
 import org.gradle.api.tasks.TaskAction
-import org.gradle.logging.ConsoleRenderer
-import org.gradle.logging.ProgressLoggerFactory
+import org.gradle.internal.logging.ConsoleRenderer
+import org.gradle.internal.logging.progress.ProgressLoggerFactory
 
 /**
  * Created by jgelais on 6/11/15.
